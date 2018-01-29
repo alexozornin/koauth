@@ -30,9 +30,6 @@ class Koauth extends EventEmitter
             try
             {
                 const user = await async_get_user_by_id_function({ id: id });
-                // console.log('func:', async_get_user_by_id_function);
-                // console.log('id:', id);
-                // console.log('user:', user);
                 done(null, user);
             }
             catch (err)
@@ -99,46 +96,30 @@ class Koauth extends EventEmitter
     async check(ctx, level)
     {
         let self = this;
-        return new Promise(async (resolve, reject) =>
+        if (!ctx.isAuthenticated())
         {
-            try
-            {
-                if (!ctx.isAuthenticated())
-                {
-                    resolve({ access: false, id: null });
-                    self.emit('access-deny', { id: null, reason_id: 1, reason: 'No authorization', method: ctx.method, path: ctx.path });
-                    return;
-                }
-                let id = ctx.session.passport.user;
-                if (level === undefined || level === null)
-                {
-                    resolve({ access: true, id: id });
-                    self.emit('access-grant', { id: id, method: ctx.method, path: ctx.path });
-                    return;
-                }
-                let user = await self.get_user({ id: ctx.session.passport.user });
-                if (!user || user.level === undefined || user.level === null || user.level === false)
-                {
-                    reject('async_get_user_by_id_function returned no valid result');
-                    self.emit('error', 'async_get_user_by_id_function returned no valid result');
-                    return;
-                }
-                if (+user.level <= +level)
-                {
-                    resolve({ access: true, id: id });
-                    self.emit('access-grant', { id: id, method: ctx.method, path: ctx.path });
-                    return;
-                }
-                resolve({ access: false, id: id, user_level: +user.level });
-                self.emit('access-deny', { id: id, reason_id: 2, reason: 'Not enough rights', method: ctx.method, path: ctx.path });
-                return;
-            }
-            catch (err)
-            {
-                reject(err);
-                return;
-            }
-        })
+            self.emit('access-deny', { id: null, reason_id: 1, reason: 'No authorization', method: ctx.method, path: ctx.path });
+            return { access: false, id: null };
+        }
+        let id = ctx.session.passport.user;
+        if (level === undefined || level === null)
+        {
+            self.emit('access-grant', { id: id, method: ctx.method, path: ctx.path });
+            return { access: true, id: id };
+        }
+        let user = await self.get_user({ id: ctx.session.passport.user });
+        if (!user || user.level === undefined || user.level === null || user.level === false)
+        {
+            self.emit('error', 'async_get_user_by_id_function returned no valid result');
+            throw new Error('async_get_user_by_id_function returned no valid result');
+        }
+        if (+user.level <= +level)
+        {
+            self.emit('access-grant', { id: id, method: ctx.method, path: ctx.path });
+            return { access: true, id: id };
+        }
+        self.emit('access-deny', { id: id, reason_id: 2, reason: 'Not enough rights', method: ctx.method, path: ctx.path });
+        return { access: false, id: id, user_level: +user.level };
     }
 }
 
