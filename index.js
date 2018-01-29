@@ -86,39 +86,37 @@ class Koauth extends EventEmitter
 
     async logout(ctx)
     {
-        let self = this;
         ctx.session = null;
         ctx.logout();
-        self.emit('logout');
+        this.emit('logout');
         return;
     }
 
     async check(ctx, level)
     {
-        let self = this;
         if (!ctx.isAuthenticated())
         {
-            self.emit('access-deny', { id: null, reason_id: 1, reason: 'No authorization', method: ctx.method, path: ctx.path });
+            this.emit('access-deny', { id: null, reason_id: 1, reason: 'No authorization', method: ctx.method, path: ctx.path });
             return { access: false, id: null };
         }
         let id = ctx.session.passport.user;
         if (level === undefined || level === null)
         {
-            self.emit('access-grant', { id: id, method: ctx.method, path: ctx.path });
+            this.emit('access-grant', { id: id, method: ctx.method, path: ctx.path });
             return { access: true, id: id };
         }
-        let user = await self.get_user({ id: ctx.session.passport.user });
+        let user = await this.get_user({ id: ctx.session.passport.user });
         if (!user || user.level === undefined || user.level === null || user.level === false)
         {
-            self.emit('error', 'async_get_user_by_id_function returned no valid result');
+            this.emit('error', 'async_get_user_by_id_function returned no valid result');
             throw new Error('async_get_user_by_id_function returned no valid result');
         }
         if (+user.level <= +level)
         {
-            self.emit('access-grant', { id: id, method: ctx.method, path: ctx.path });
+            this.emit('access-grant', { id: id, method: ctx.method, path: ctx.path });
             return { access: true, id: id };
         }
-        self.emit('access-deny', { id: id, reason_id: 2, reason: 'Not enough rights', method: ctx.method, path: ctx.path });
+        this.emit('access-deny', { id: id, reason_id: 2, reason: 'Not enough rights', method: ctx.method, path: ctx.path });
         return { access: false, id: id, user_level: +user.level };
     }
 }
