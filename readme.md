@@ -36,7 +36,7 @@ const koauth = new Koauth(app, ['secret'], { key: 'my_app' }, getuser, checkuser
 async authenticate(ctx)
 ```
 
-ctx.request.body должно содержать поля username, password.
+ctx.request.body должно содержать поля username, password. Возвращемое значение содержит объект с информацией о пользователе (результат async_get_user_by_id_function).
 
 В случае успешной аутентификации пользователя, будет создана его сессия. Состояние аутентификации можно проверить в контексте запроса
 

@@ -64,24 +64,31 @@ class Koauth extends EventEmitter
         this.app.use(this.passport.session());
     }
 
-    async authenticate(ctx)
+    authenticate(ctx)
     {
         let self = this;
-        return this.passport.authenticate('local', function (err, user, info, status)
+        return new Promise((resolve, reject) =>
         {
-            if (err)
+            let result = null;
+            this.passport.authenticate('local', function (err, user, info, status)
             {
-                self.emit('error', err);
+                if (err)
+                {
+                    self.emit('error', err);
+                    resolve(null);
+                    return;
+                }
+                if (user)
+                {
+                    self.emit('auth-success', user);
+                    resolve(user);
+                    return ctx.login(user, {});
+                }
+                self.emit('auth-fail', ctx.request.body);
+                resolve(null);
                 return;
-            }
-            if (user)
-            {
-                self.emit('auth-success', user);
-                return ctx.login(user, {});
-            }
-            self.emit('auth-fail', ctx.request.body);
-            return;
-        })(ctx);
+            })(ctx);
+        })
     }
 
     async logout(ctx)
