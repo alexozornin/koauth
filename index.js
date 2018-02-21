@@ -81,7 +81,7 @@ class Koauth extends EventEmitter
                 if (user)
                 {
                     self.emit('auth-success', user);
-                    resolve(user);
+                    resolve({ id: user.id, username: user.username, level: user.level });
                     return ctx.login(user, {});
                 }
                 self.emit('auth-fail', ctx.request.body);
