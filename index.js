@@ -1,131 +1,297 @@
 'use strict'
 
-const EventEmitter = require('events');
-const Koa = require('koa');
+const fs = require('fs');
+const afs = require('alex-async-fs');
+const path = require('path');
+const crypto = require('crypto');
 
-class Koauth extends EventEmitter
+function cipher(key32, key16, input, format)
 {
-    constructor(koa_app, app_keys, session_options, async_get_user_by_id_function, async_check_user_function)
+    let sha256 = crypto.createHash('sha256');
+    sha256.update(key32);
+    let keyBuffer = Buffer.from(sha256.digest('latin1'), 'latin1');
+    let md5 = crypto.createHash('md5').update(key16).digest('latin1');
+    let ivBuffer = Buffer.from(md5, 'latin1')
+    let caes = crypto.createCipheriv('aes-256-cbc', keyBuffer, ivBuffer);
+    let result = caes.update(input, 'utf8', format);
+    return result + caes.final(format);
+}
+
+function decipher(key32, key16, input, format)
+{
+    let sha256 = crypto.createHash('sha256').update(key32).digest('latin1');
+    let keyBuffer = Buffer.from(sha256, 'latin1');
+    let md5 = crypto.createHash('md5').update(key16).digest('latin1');
+    let ivBuffer = Buffer.from(md5, 'latin1')
+    let daes = crypto.createDecipheriv('aes-256-cbc', keyBuffer, ivBuffer);
+    let result = daes.update(input, format, 'utf8');
+    return result + daes.final('utf8');
+}
+
+async function getSession(dir, userId)
+{
+    let data = await afs.readFileAsync(path.join(dir, '' + userId), { encoding: 'utf8' });
+    let parts = data.split(':');
+    if (parts.length != 2)
     {
-        super();
+        console.log('RETARD ALERT', data);
+    }
+    return {
+        key: parts[0],
+        expires: parts[1]
+    }
+}
 
-        this.get_user = async_get_user_by_id_function;
-        this.check_user = async_check_user_function;
+async function setSession(dir, userId, key, expires)
+{
+    let data = '' + key + ':' + expires;
+    await afs.writeFileAsync(path.join(dir, '' + userId), data, { encoding: 'utf8' });
+}
 
-        this.app = koa_app;
+async function removeSession(dir, userId)
+{
+    await afs.unlinkAsync(path.join(dir, '' + userId));
+}
 
-        this.session = require('koa-session');
-        this.app.keys = app_keys;
-        this.app.use(this.session(session_options, this.app));
-
-        this.passport = require('koa-passport');
-
-        this.passport.serializeUser(async function (user, done)
+class Koauth
+{
+    constructor(getUserById, signInUser, signOutUser, sessionDirPath, options = {})
+    {
+        if (typeof options != 'object')
         {
-            done(null, user.id);
-        })
-
-        this.passport.deserializeUser(async function (id, done)
+            options = {};
+        }
+        this._private = {};
+        this._private.getUserById = getUserById;
+        this._private.signInUser = signInUser;
+        this._private.signOutUser = signOutUser;
+        this._private.sessionDirPath = sessionDirPath;
+        this._private.options = options;
+        if (!this._private.options.tokenName)
         {
-            try
-            {
-                const user = await async_get_user_by_id_function({ id: id });
-                done(null, user);
-            }
-            catch (err)
-            {
-                done(err);
-            }
-        })
-
-        this.LocalStrategy = require('passport-local').Strategy;
-
-        this.passport.use(new this.LocalStrategy(async function (username, password, done)
+            this._private.options.tokenName = 'auth';
+        }
+        if (!this._private.options.mode)
         {
-            try
-            {
-                let res = await async_check_user_function({ username: username, password: password });
-                if (res)
+            this._private.options.mode = 'cookie';
+        }
+        if (!this._private.options.header)
+        {
+            this._private.options.header = 'Authorization';
+        }
+        if (!this._private.options.maxAge)
+        {
+            this._private.options.maxAge = 86400000;
+        }
+        if (!this._private.options.autoUpdate)
+        {
+            this._private.options.autoUpdate = true;
+        }
+        if (!this._private.options.autoUpdateTimeout)
+        {
+            this._private.options.autoUpdateTimeout = 43200000;
+        }
+        if (!this._private.options.format)
+        {
+            this._private.options.format = 'base64';
+        }
+        if (!this._private.options.key32)
+        {
+            this._private.options.key32 = '' + Math.random();
+        }
+        if (!this._private.options.key16)
+        {
+            this._private.options.key16 = '' + Math.random();
+        }
+        switch (this._private.options.mode)
+        {
+            case 'cookie':
+                this._private.getToken = (ctx) =>
                 {
-                    done(null, res);
+                    return ctx.cookies.get(this._private.options.tokenName);
                 }
-                else
+                this._private.setToken = (ctx, token) =>
                 {
-                    done(null, false);
+                    ctx.cookies.set(this._private.options.tokenName, token, { overwrite: true, httpOnly: true, maxAge: this._private.options.maxAge });
                 }
-            }
-            catch (err)
-            {
-                done(err);
-            }
-        }))
-
-        this.app.use(this.passport.initialize());
-        this.app.use(this.passport.session());
+                break;
+            case 'header':
+                this._private.getToken = (ctx) =>
+                {
+                    return ctx.headers[this._private.options.header];
+                }
+                this._private.setToken = () => { }
+                break;
+            default:
+                throw new Error('Invalid mode');
+        }
     }
 
-    authenticate(ctx)
+    async signIn(ctx, ...params)
     {
-        let self = this;
-        return new Promise((resolve, reject) =>
+        let user = this._private.signInUser(ctx, ...params);
+        if (user instanceof Promise)
         {
-            let result = null;
-            this.passport.authenticate('local', function (err, user, info, status)
+            user = await user;
+        }
+        if (!user)
+        {
+            return null;
+        }
+        let key = crypto.createHash('sha256').update('' + Math.random()).digest('base64');
+        let expires = Date.now() + (this._private.options.maxAge);
+        await setSession(this._private.sessionDirPath, user, key, expires)
+        let token = {
+            user,
+            key
+        }
+        let ctoken = cipher(this._private.options.key32, this._private.options.key16, JSON.stringify(token), this._private.options.format);
+        this._private.setToken(ctx, ctoken);
+        return ctoken;
+    }
+
+    async signOut(ctx, ...params)
+    {
+        let result = this._private.signOutUser(ctx, ...params);
+        if (result instanceof Promise)
+        {
+            await result;
+        }
+        let ctoken = this._private.getToken(ctx);
+        if (!ctoken)
+        {
+            return;
+        }
+        let token = null;
+        try
+        {
+            token = JSON.parse(decipher(this._private.options.key32, this._private.options.key16, ctoken, this._private.options.format));
+        }
+        catch (err)
+        {
+            return;
+        }
+        if (!token)
+        {
+            return;
+        }
+        await removeSession(this._private.sessionDirPath, token.user)
+        this._private.setToken(ctx, '');
+    }
+
+    async updateSession(ctx)
+    {
+        let ctoken = this._private.getToken(ctx);
+        if (!ctoken)
+        {
+            return null;
+        }
+        let token = null;
+        try
+        {
+            token = JSON.parse(decipher(this._private.options.key32, this._private.options.key16, ctoken, this._private.options.format));
+        }
+        catch (err)
+        {
+            return null;
+        }
+        if (!token)
+        {
+            return null;
+        }
+        let key = crypto.createHash('sha256').update('' + Math.random()).digest('base64');
+        let expires = Date.now() + (this._private.options.maxAge);
+        await setSession(this._private.sessionDirPath, token.user, key, expires);
+        token = {
+            user,
+            key
+        }
+        ctoken = cipher(this._private.options.key32, this._private.options.key16, JSON.stringify(token), this._private.options.format);
+        this._private.setToken(ctx, ctoken);
+        return ctoken;
+    }
+
+    async forceSessionRemove(userId)
+    {
+        if (await afs.existsAsync(path.join(this._private.sessionDirPath, '' + userId)))
+        {
+            await afs.unlinkAsync(path.join(this._private.sessionDirPath, '' + userId));
+        }
+    }
+
+    async getUser(ctx)
+    {
+        let ctoken = this._private.getToken(ctx);
+        if (!ctoken)
+        {
+            return null;
+        }
+        let token = null;
+        try
+        {
+            token = JSON.parse(decipher(this._private.options.key32, this._private.options.key16, ctoken, this._private.options.format));
+        }
+        catch (err)
+        {
+            return null;
+        }
+        if (!token || !token.user || !token.key)
+        {
+            return null;
+        }
+        let now = Date.now();
+        let session = await getSession(this._private.sessionDirPath, token.user);
+        if (now > session.expires || now < session.expires - this._private.options.maxAge)
+        {
+            return null;
+        }
+        let result = this._private.getUserById(token.user);
+        if (result instanceof Promise)
+        {
+            result = await result;
+        }
+        if (this._private.options.autoUpdate)
+        {
+            console.log('checkinf for update');
+            if (now > session.expires - this._private.options.maxAge + this._private.options.autoUpdateTimeout)
             {
-                if (err)
-                {
-                    self.emit('error', err);
-                    resolve(null);
-                    return;
+                console.log('updating')
+                let user = token.user;
+                let key = crypto.createHash('sha256').update('' + Math.random()).digest('base64');
+                let expires = Date.now() + (this._private.options.maxAge);
+                await setSession(this._private.sessionDirPath, user, key, expires);
+                token = {
+                    user,
+                    key
                 }
-                if (user)
-                {
-                    self.emit('auth-success', user);
-                    resolve({ id: user.id, username: user.username, level: user.level });
-                    return ctx.login(user, {});
-                }
-                self.emit('auth-fail', ctx.request.body);
-                resolve(null);
-                return;
-            })(ctx);
-        })
+                ctoken = cipher(this._private.options.key32, this._private.options.key16, JSON.stringify(token), this._private.options.format);
+                this._private.setToken(ctx, ctoken);
+            }
+        }
+        return result;
     }
 
-    async logout(ctx)
+    async freeSessions()
     {
-        ctx.session = null;
-        ctx.logout();
-        this.emit('logout');
-        return;
-    }
-
-    async check(ctx, level)
-    {
-        if (!ctx.isAuthenticated())
+        let files = await afs.readDirAsync(this._private.sessionDirPath);
+        let now = Date.now();
+        for (let i in files)
         {
-            this.emit('access-deny', { id: null, reason_id: 1, reason: 'No authorization', method: ctx.method, path: ctx.path });
-            return { access: false, id: null };
+            let data = await afs.readFileAsync(path.join(this._private.sessionDirPath, files[i]));
+            let parts = data.split(':');
+            if (!parts[1] || now > parts[1])
+            {
+                await afs.unlinkAsync(path.join(this._private.sessionDirPath, files[i]));
+            }
         }
-        let id = ctx.session.passport.user;
-        if (level === undefined || level === null)
-        {
-            this.emit('access-grant', { id: id, method: ctx.method, path: ctx.path });
-            return { access: true, id: id };
-        }
-        let user = await this.get_user({ id: ctx.session.passport.user });
-        if (!user || user.level === undefined || user.level === null || user.level === false)
-        {
-            this.emit('error', 'async_get_user_by_id_function returned no valid result');
-            throw new Error('async_get_user_by_id_function returned no valid result');
-        }
-        if (+user.level <= +level)
-        {
-            this.emit('access-grant', { id: id, method: ctx.method, path: ctx.path });
-            return { access: true, id: id };
-        }
-        this.emit('access-deny', { id: id, reason_id: 2, reason: 'Not enough rights', method: ctx.method, path: ctx.path });
-        return { access: false, id: id, user_level: +user.level };
     }
 }
 
 module.exports = Koauth;
+
+// let text = 'abcdefghijkladfggbakjggbntkjbnkjbgiurshgurghgudrghughsoihgtoidgthsithmn';
+// console.log(text);
+// let ctext = cipher('12345', '123', text, 'latin1');
+// console.log(ctext);
+// let dtext = decipher('12345', '123', ctext, 'latin1');
+// console.log(dtext);
