@@ -34,7 +34,7 @@ async function getSession(dir, userId)
     let parts = data.split(':');
     if (parts.length != 2)
     {
-        console.log('RETARD ALERT', data);
+        return null;
     }
     return {
         key: parts[0],
@@ -129,25 +129,28 @@ class Koauth
 
     async signIn(ctx, ...params)
     {
-        let user = this._private.signInUser(ctx, ...params);
-        if (user instanceof Promise)
+        let userId = this._private.signInUser(ctx, ...params);
+        if (userId instanceof Promise)
         {
-            user = await user;
+            userId = await userId;
         }
-        if (!user)
+        if (!userId)
         {
             return null;
         }
         let key = crypto.createHash('sha256').update('' + Math.random()).digest('base64');
         let expires = Date.now() + (this._private.options.maxAge);
-        await setSession(this._private.sessionDirPath, user, key, expires)
+        await setSession(this._private.sessionDirPath, userId, key, expires)
         let token = {
-            user,
+            userId,
             key
         }
         let ctoken = cipher(this._private.options.key32, this._private.options.key16, JSON.stringify(token), this._private.options.format);
         this._private.setToken(ctx, ctoken);
-        return ctoken;
+        return {
+            userId,
+            token: ctoken
+        };
     }
 
     async signOut(ctx, ...params)

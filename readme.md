@@ -147,8 +147,8 @@ const koauth = new Koauth(getUserById, signInUser, signOutUser, sessionDirPath, 
     <tr>
         <td>signIn</td>
         <td>ctx, ...params</td>
-        <td>Promise&lt;string&gt;</td>
-        <td>Аутентификация пользователя. Аргументы (ctx, ...params) также передаются в функцию signInUser, указанную в конструкторе. Возвращает токен при успешной аутентификации или null в противном случае. В случае успеха создается сессия пользователя.</td>
+        <td>Promise&lt;object&gt;</td>
+        <td>Аутентификация пользователя. Аргументы (ctx, ...params) также передаются в функцию signInUser, указанную в конструкторе. Возвращает объект, содержащий поля userId и token при успешной аутентификации или null в противном случае. В случае успеха создается сессия пользователя.</td>
     </tr>
     <tr>
         <td>signOut</td>
