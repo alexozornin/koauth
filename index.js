@@ -27,19 +27,11 @@ function decipher(key32, key16, input, format) {
 }
 
 async function getSession(userId, dir) {
-    let res = this._private.getSession(userId, dir = '');
-    if (res instanceof Promise) {
-        res = await res;
-    }
-    return res;
+    return await this._private.getSession(userId, dir = '');
 }
 
 async function setSession(userId, key, expires, dir = '') {
-    let res = this._private.setSession(userId, key, expires, dir);
-    if (res instanceof Promise) {
-        res = await res;
-    }
-    return res;
+    return await this._private.setSession(userId, key, expires, dir = '');
 }
 
 async function removeSession(dir, userId) {
@@ -132,8 +124,21 @@ class Koauth {
                 }
                 break;
             case 'custom':
-                this._private.getSession = this._private.options.getSessionByUserId;
-                this._private.setSession = this._private.options.setSessionByUserId;
+                this._private.getSession = async (userId) => {
+                    let res = this._private.options.getSessionByUserId(userId);
+                    if (res instanceof Promise) {
+                        res = await res;
+                    }
+                    return res;
+                }
+                this._private.setSession = async (userId, key, expires) => {
+                    let session = '' + key + ':' + expires;
+                    let res = this._private.options.setSessionByUserId(userId, session);
+                    if (res instanceof Promise) {
+                        res = await res;
+                    }
+                    return res;
+                }
                 break;
             default:
                 throw new Error('Invalid session storage');
