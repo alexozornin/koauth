@@ -35,11 +35,6 @@ const Koauth = require('koauth');
         <td>Синхронная или асинхронная функция, выполняющаяся при выходе пользователя, может не возвращать значение.</td>
     </tr>
     <tr>
-        <td>sessionDirPath</td>
-        <td>string</td>
-        <td>Путь до директории, в которой будут храниться сессии пользователей.</td>
-    </tr>
-    <tr>
         <td>options</td>
         <td>object</td>
         <td>Набор необязательных опций.</td>
@@ -72,6 +67,30 @@ const Koauth = require('koauth');
         <td>string</td>
         <td>'Authorization'</td>
         <td>Название HTTP-заголовка при использовании режима 'header'.</td>
+    </tr>
+    <tr>
+        <td>sessionStorage</td>
+        <td>string</td>
+        <td>'fs'</td>
+        <td>Тип хранения сессий: 'fs' | 'custom'. Тип 'fs' - хранение в файловой системе, 'custom' - собственная реализация.</td>
+    </tr>
+    <tr>
+        <td>sessionDirPath</td>
+        <td>string</td>
+        <td>''</td>
+        <td>Путь до директории для хранения сессий при типе хранения 'fs'.</td>
+    </tr>
+    <tr>
+        <td>getSessionByUserId</td>
+        <td>function</td>
+        <td>() => { }</td>
+        <td>Синхронная или асинхронная функция, получающая сессию пользователя по его идентификатору при типе хранения 'custom'.</td>
+    </tr>
+    <tr>
+        <td>setSessionByUserId</td>
+        <td>function</td>
+        <td>() => { }</td>
+        <td>Синхронная или асинхронная функция, задающая сессию пользователя по его идентификатору при типе хранения 'custom'.</td>
     </tr>
     <tr>
         <td>maxAge</td>
@@ -130,7 +149,7 @@ function signOutUser(ctx, ...params) {
 
 const sessionDirPath = path.join(__dirname, 'sessions');
 
-const koauth = new Koauth(getUserById, signInUser, signOutUser, sessionDirPath, {
+const koauth = new Koauth(getUserById, signInUser, signOutUser, {
     name: 'myAuth'
 })
 ```
