@@ -158,7 +158,7 @@ class Koauth {
         }
         let key = crypto.createHash('sha256').update('' + Math.random()).digest('base64');
         let expires = Date.now() + (this._private.options.maxAge);
-        await this._private.setSession(userId, key, expires, this._private.sessionDirPath)
+        await this._private.setSession(userId, key, expires, this._private.options.sessionDirPath)
         let token = {
             userId,
             key
@@ -190,7 +190,7 @@ class Koauth {
         if (!token) {
             return;
         }
-        await this._private.removeSession(this._private.sessionDirPath, token.user)
+        await this._private.removeSession(this._private.options.sessionDirPath, token.user)
         this._private.setToken(ctx, '');
     }
 
@@ -211,7 +211,7 @@ class Koauth {
         }
         let key = crypto.createHash('sha256').update('' + Math.random()).digest('base64');
         let expires = Date.now() + (this._private.options.maxAge);
-        await this._private.setSession(token.user, key, expires, this._private.sessionDirPath);
+        await this._private.setSession(token.user, key, expires, this._private.options.sessionDirPath);
         token = {
             user,
             key
@@ -241,7 +241,7 @@ class Koauth {
             return null;
         }
         let now = Date.now();
-        let session = await this._private.getSession(token.user, this._private.sessionDirPath);
+        let session = await this._private.getSession(token.user, this._private.options.sessionDirPath);
         if (now > session.expires || now < session.expires - this._private.options.maxAge) {
             return null;
         }
@@ -269,13 +269,13 @@ class Koauth {
     }
 
     async freeSessions() {
-        let files = await afs.readDirAsync(this._private.sessionDirPath);
+        let files = await afs.readDirAsync(this._private.options.sessionDirPath);
         let now = Date.now();
         for (let i in files) {
-            let data = await afs.readFileAsync(path.join(this._private.sessionDirPath, files[i]));
+            let data = await afs.readFileAsync(path.join(this._private.options.sessionDirPath, files[i]));
             let parts = data.split(':');
             if (!parts[1] || now > parts[1]) {
-                await afs.unlinkAsync(path.join(this._private.sessionDirPath, files[i]));
+                await afs.unlinkAsync(path.join(this._private.options.sessionDirPath, files[i]));
             }
         }
     }
