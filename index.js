@@ -250,9 +250,7 @@ class Koauth {
             result = await result;
         }
         if (this._private.options.autoUpdate) {
-            console.log('checkinf for update');
             if (now > session.expires - this._private.options.maxAge + this._private.options.autoUpdateTimeout) {
-                console.log('updating')
                 let user = token.user;
                 let key = crypto.createHash('sha256').update('' + Math.random()).digest('base64');
                 let expires = Date.now() + (this._private.options.maxAge);
