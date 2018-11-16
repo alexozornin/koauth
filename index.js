@@ -1,6 +1,5 @@
 'use strict'
 
-const fs = require('fs');
 const afs = require('alex-async-fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -49,7 +48,7 @@ class Koauth {
             this._private.options.sessionStorage = 'fs';
         }
         if (!this._private.options.sessionDirPath) {
-            this._private.options.sessionDirPath = '';
+            this._private.options.sessionDirPath = path.join(__dirname, 'sessions');
         }
         if (!this._private.options.getSessionByUserId) {
             this._private.options.getSessionByUserId = () => { };

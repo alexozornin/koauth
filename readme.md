@@ -77,7 +77,7 @@ const Koauth = require('koauth');
     <tr>
         <td>sessionDirPath</td>
         <td>string</td>
-        <td>''</td>
+        <td>./sessions</td>
         <td>Путь до директории для хранения сессий при типе хранения 'fs'.</td>
     </tr>
     <tr>
