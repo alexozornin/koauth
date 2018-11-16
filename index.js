@@ -160,7 +160,7 @@ class Koauth {
         let expires = Date.now() + (this._private.options.maxAge);
         await this._private.setSession(userId, key, expires, this._private.options.sessionDirPath)
         let token = {
-            user,
+            user: userId,
             key
         }
         let ctoken = cipher(this._private.options.key32, this._private.options.key16, JSON.stringify(token), this._private.options.format);
@@ -213,7 +213,7 @@ class Koauth {
         let expires = Date.now() + (this._private.options.maxAge);
         await this._private.setSession(token.user, key, expires, this._private.options.sessionDirPath);
         token = {
-            user,
+            user: token.user,
             key
         }
         ctoken = cipher(this._private.options.key32, this._private.options.key16, JSON.stringify(token), this._private.options.format);
