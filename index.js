@@ -166,7 +166,7 @@ class Koauth {
         let ctoken = cipher(this._private.options.key32, this._private.options.key16, JSON.stringify(token), this._private.options.format);
         this._private.setToken(ctx, ctoken);
         return {
-            user,
+            user: userId,
             token: ctoken
         };
     }
