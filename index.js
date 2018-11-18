@@ -221,7 +221,7 @@ class Koauth {
     }
 
     async forceSessionRemove(userId) {
-        await this._private.removeSession(userId, this._private.sessionDirPath);
+        await this._private.removeSession(userId, this._private.options.sessionDirPath);
     }
 
     async getUser(ctx) {
@@ -253,7 +253,7 @@ class Koauth {
                 let user = token.user;
                 let key = crypto.createHash('sha256').update('' + Math.random()).digest('base64');
                 let expires = Date.now() + (this._private.options.maxAge);
-                await this._private.setSession(user, key, expires, this._private.sessionDirPath);
+                await this._private.setSession(user, key, expires, this._private.options.sessionDirPath);
                 token = {
                     user,
                     key
