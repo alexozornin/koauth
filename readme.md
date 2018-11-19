@@ -93,7 +93,7 @@ const Koauth = require('koauth');
         <td>Синхронная или асинхронная функция, задающая сессию пользователя по его идентификатору при типе хранения 'custom'. Принимает аргументы userId, session.</td>
     </tr>
     <tr>
-        <td>setSessionByUserId</td>
+        <td>removeSessionByUserId</td>
         <td>function</td>
         <td>() => { }</td>
         <td>Синхронная или асинхронная функция, удалающая сессию пользователя по его идентификатору при типе хранения 'custom'. Принимает аргумент userId.</td>
