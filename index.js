@@ -189,7 +189,7 @@ class Koauth {
         if (!token) {
             return;
         }
-        await this._private.removeSession(this._private.options.sessionDirPath, token.user)
+        await this._private.removeSession(token.user, this._private.options.sessionDirPath);
         this._private.setToken(ctx, '');
     }
 
