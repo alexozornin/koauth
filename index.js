@@ -124,7 +124,14 @@ class Koauth {
                     if (res instanceof Promise) {
                         res = await res;
                     }
-                    return res;
+                    let parts = res.split(':');
+                    if (parts.length != 2) {
+                        return null;
+                    }
+                    return {
+                        key: parts[0],
+                        expires: parts[1]
+                    }
                 }
                 this._private.setSession = async (userId, key, expires) => {
                     let session = '' + key + ':' + expires;
@@ -241,7 +248,7 @@ class Koauth {
         }
         let now = Date.now();
         let session = await this._private.getSession(token.user, this._private.options.sessionDirPath);
-        if (now > session.expires || now < session.expires - this._private.options.maxAge) {
+        if (!session || now > session.expires || now < session.expires - this._private.options.maxAge || token.key != session.key) {
             return null;
         }
         let result = this._private.getUserById(token.user);
