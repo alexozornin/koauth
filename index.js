@@ -124,6 +124,9 @@ class Koauth {
                     if (res instanceof Promise) {
                         res = await res;
                     }
+                    if (!res) {
+                        return null;
+                    }
                     let parts = res.split(':');
                     if (parts.length != 2) {
                         return null;
