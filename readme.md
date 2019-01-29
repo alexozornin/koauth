@@ -57,6 +57,12 @@ const Koauth = require('koauth');
         <td>Название токена.</td>
     </tr>
     <tr>
+        <td>allowMultipleSessions</td>
+        <td>boolean</td>
+        <td>false</td>
+        <td>Разрешить одновременное существование нескольких сессий одного пользователя (менее безопасно).</td>
+    </tr>
+    <tr>
         <td>mode</td>
         <td>string</td>
         <td>'cookie'</td>
@@ -179,7 +185,7 @@ const koauth = new Koauth(getUserById, signInUser, signOutUser, {
         <td>signOut</td>
         <td>ctx, ...params</td>
         <td>Promise&lt;void&gt;</td>
-        <td>Выход пользователя. Аргументы (ctx, ...params) также передаются в функцию signInUser, указанную в конструкторе.</td>
+        <td>Выход пользователя. Аргументы (ctx, ...params) также передаются в функцию signOutUser, указанную в конструкторе.</td>
     </tr>
     <tr>
         <td>updateSession</td>

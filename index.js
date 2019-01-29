@@ -26,6 +26,27 @@ function decipher(key32, key16, input, format) {
 }
 
 class Koauth {
+    /**
+     * Creates an instance of Koauth.
+     * @param {Function} getUserById
+     * @param {Function} signInUser
+     * @param {Function} signOutUser
+     * @param {Object} options
+     * @param {String} options.tokenName
+     * @param {'cookie' | 'header'} options.mode
+     * @param {String} options.header
+     * @param {'fs' | 'custom'} options.sessionStorage
+     * @param {String} options.sessionDirPath
+     * @param {Function} options.getSessionByUserId
+     * @param {Function} options.setSessionByUserId
+     * @param {Function} options.removeSessionByUserId
+     * @param {Number} options.maxAge
+     * @param {Boolean} options.autoUpdate
+     * @param {Number} options.autoUpdateTimeout
+     * @param {'hex' | 'base64'} options.format
+     * @param {String} options.key32
+     * @param {String} options.key16
+     */
     constructor(getUserById, signInUser, signOutUser, options = {}) {
         if (typeof options != 'object') {
             options = {};
@@ -40,6 +61,9 @@ class Koauth {
         }
         if (!this._private.options.mode) {
             this._private.options.mode = 'cookie';
+        }
+        if (!this._private.options.allowMultipleSessions) {
+            this._private.options.allowMultipleSessions = false;
         }
         if (!this._private.options.header) {
             this._private.options.header = 'Authorization';
@@ -56,8 +80,8 @@ class Koauth {
         if (!this._private.options.setSessionByUserId) {
             this._private.options.setSessionByUserId = () => { };
         }
-        if (!this._private.options.removeSessionByUserId) {
-            this._private.options.removeSessionByUserId = () => { };
+        if (!this._private.options.removeSessionTokenByUserId) {
+            this._private.options.removeSessionTokenByUserId = () => { };
         }
         if (!this._private.options.maxAge) {
             this._private.options.maxAge = 86400000;
@@ -97,7 +121,7 @@ class Koauth {
         }
         switch (this._private.options.sessionStorage) {
             case 'fs':
-                this._private.getSession = async (userId, dir) => {
+                this._private.getSessionToken = async (userId, dir) => {
                     let data = await afs.readFileAsync(path.join(dir, '' + userId), { encoding: 'utf8' });
                     let parts = data.split(':');
                     if (parts.length != 2) {
@@ -108,18 +132,18 @@ class Koauth {
                         expires: parts[1]
                     }
                 }
-                this._private.setSession = async (userId, key, expires, dir) => {
+                this._private.setSessionToken = async (userId, key, expires, dir) => {
                     let data = '' + key + ':' + expires;
                     await afs.writeFileAsync(path.join(dir, '' + userId), data, { encoding: 'utf8' });
                 }
-                this._private.removeSession = async (userId, dir) => {
+                this._private.removeSessionToken = async (userId, dir) => {
                     if (await afs.existsAsync(path.join(dir, '' + userId))) {
                         await afs.unlinkAsync(path.join(dir, '' + userId));
                     }
                 }
                 break;
             case 'custom':
-                this._private.getSession = async (userId) => {
+                this._private.getSessionToken = async (userId) => {
                     let res = this._private.options.getSessionByUserId(userId);
                     if (res instanceof Promise) {
                         res = await res;
@@ -136,7 +160,7 @@ class Koauth {
                         expires: parts[1]
                     }
                 }
-                this._private.setSession = async (userId, key, expires) => {
+                this._private.setSessionToken = async (userId, key, expires) => {
                     let session = '' + key + ':' + expires;
                     let res = this._private.options.setSessionByUserId(userId, session);
                     if (res instanceof Promise) {
@@ -144,8 +168,8 @@ class Koauth {
                     }
                     return res;
                 }
-                this._private.removeSession = async (userId) => {
-                    let res = this._private.options.removeSessionByUserId(userId);
+                this._private.removeSessionToken = async (userId) => {
+                    let res = this._private.options.removeSessionTokenByUserId(userId);
                     if (res instanceof Promise) {
                         res = await res;
                     }
@@ -157,6 +181,11 @@ class Koauth {
         }
     }
 
+    /**
+     * Signs in user.
+     * @param {Object} ctx - Koa context
+     * @param  {...any} params
+     */
     async signIn(ctx, ...params) {
         let userId = this._private.signInUser(ctx, ...params);
         if (userId instanceof Promise) {
@@ -165,9 +194,21 @@ class Koauth {
         if (!userId) {
             return null;
         }
-        let key = crypto.createHash('sha256').update('' + Math.random()).digest('base64');
+        let key = '';
+        if (this._private.options.allowMultipleSessions) {
+            let session = await this._private.getSessionToken(token.user, this._private.options.sessionDirPath);
+            if (session && session.key) {
+                key = session.key;
+            }
+            else {
+                key = crypto.createHash('sha256').update('' + Math.random()).digest('base64');
+            }
+        }
+        else {
+            key = crypto.createHash('sha256').update('' + Math.random()).digest('base64');
+        }
         let expires = Date.now() + (this._private.options.maxAge);
-        await this._private.setSession(userId, key, expires, this._private.options.sessionDirPath)
+        await this._private.setSessionToken(userId, key, expires, this._private.options.sessionDirPath)
         let token = {
             user: userId,
             key
@@ -180,6 +221,11 @@ class Koauth {
         };
     }
 
+    /**
+     * Signs out user.
+     * @param {Object} ctx - Koa context
+     * @param  {...any} params
+     */
     async signOut(ctx, ...params) {
         let result = this._private.signOutUser(ctx, ...params);
         if (result instanceof Promise) {
@@ -199,10 +245,16 @@ class Koauth {
         if (!token) {
             return;
         }
-        await this._private.removeSession(token.user, this._private.options.sessionDirPath);
         this._private.setToken(ctx, '');
+        if (!this._private.options.allowMultipleSessions) {
+            await this._private.removeSessionToken(token.user, this._private.options.sessionDirPath);
+        }
     }
 
+    /**
+     * Updates user session.
+     * @param {Object} ctx - Koa context
+     */
     async updateSession(ctx) {
         let ctoken = this._private.getToken(ctx);
         if (!ctoken) {
@@ -218,9 +270,21 @@ class Koauth {
         if (!token) {
             return null;
         }
-        let key = crypto.createHash('sha256').update('' + Math.random()).digest('base64');
+        let key = '';
+        if (this._private.options.allowMultipleSessions) {
+            let session = await this._private.getSessionToken(token.user, this._private.options.sessionDirPath);
+            if (session && session.key) {
+                key = session.key;
+            }
+            else {
+                key = crypto.createHash('sha256').update('' + Math.random()).digest('base64');
+            }
+        }
+        else {
+            key = crypto.createHash('sha256').update('' + Math.random()).digest('base64');
+        }
         let expires = Date.now() + (this._private.options.maxAge);
-        await this._private.setSession(token.user, key, expires, this._private.options.sessionDirPath);
+        await this._private.setSessionToken(token.user, key, expires, this._private.options.sessionDirPath);
         token = {
             user: token.user,
             key
@@ -230,10 +294,18 @@ class Koauth {
         return ctoken;
     }
 
+    /**
+     * Remove user session from server.
+     * @param {Number} userId
+     */
     async forceSessionRemove(userId) {
-        await this._private.removeSession(userId, this._private.options.sessionDirPath);
+        await this._private.removeSessionToken(userId, this._private.options.sessionDirPath);
     }
 
+    /**
+     * Get user from client session.
+     * @param {Object} ctx - Koa context
+     */
     async getUser(ctx) {
         let ctoken = this._private.getToken(ctx);
         if (!ctoken) {
@@ -250,7 +322,7 @@ class Koauth {
             return null;
         }
         let now = Date.now();
-        let session = await this._private.getSession(token.user, this._private.options.sessionDirPath);
+        let session = await this._private.getSessionToken(token.user, this._private.options.sessionDirPath);
         if (!session || now > session.expires || now < session.expires - this._private.options.maxAge || token.key != session.key) {
             return null;
         }
@@ -263,7 +335,7 @@ class Koauth {
                 let user = token.user;
                 let key = crypto.createHash('sha256').update('' + Math.random()).digest('base64');
                 let expires = Date.now() + (this._private.options.maxAge);
-                await this._private.setSession(user, key, expires, this._private.options.sessionDirPath);
+                await this._private.setSessionToken(user, key, expires, this._private.options.sessionDirPath);
                 token = {
                     user,
                     key
@@ -275,6 +347,9 @@ class Koauth {
         return result;
     }
 
+    /**
+     * Free disk space from old sessions.
+     */
     async freeSessions() {
         let files = await afs.readDirAsync(this._private.options.sessionDirPath);
         let now = Date.now();
