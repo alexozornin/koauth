@@ -196,7 +196,7 @@ class Koauth {
         }
         let key = '';
         if (this._private.options.allowMultipleSessions) {
-            let session = await this._private.getSessionToken(token.user, this._private.options.sessionDirPath);
+            let session = await this._private.getSessionToken(userId, this._private.options.sessionDirPath);
             if (session && session.key) {
                 key = session.key;
             }
